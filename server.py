@@ -15,7 +15,6 @@ def home():
 
 @socketio.on('connect')
 def handle_connect():
-    # When a player first connects, tell their frontend to play the "Main Menu" loop
     emit('change_menu_state', {'state': 'MAIN_MENU'})
 
 @socketio.on('join_game_room')
@@ -51,7 +50,6 @@ def handle_join_room(data):
     room["scores"][player_id] = 0
     join_room(room_code)
 
-    # Tell this player's frontend to switch to the "Lobby Waiting Animation" screen
     emit('change_menu_state', {'state': 'LOBBY_WAITING'})
 
     is_host = (player_id == room["host_id"])
@@ -106,10 +104,8 @@ def handle_start_game(data):
 
     room["pacman_id"] = random.choice(room["players"])
     
-    # 1. Trigger a non-gameplay "READY? GO!" opening cutscene animation across all clients
     emit('play_cutscene', {'type': 'MATCH_START_INTRO'}, to=room_code)
     
-    # 2. Set up the game layout states
     send_role_updates(room_code)
 
 @socketio.on('pacman_ate_pellet')
@@ -123,7 +119,6 @@ def handle_pellet(data):
     room["scores"][pacman_id] += 10
     
     if room["scores"][pacman_id] >= room["points_to_win"]:
-        # Trigger the non-gameplay Game Over celebration loop animation!
         emit('change_menu_state', {'state': 'GAME_OVER', 'winner': pacman_id}, to=room_code)
         room["game_started"] = False
         return
@@ -152,9 +147,6 @@ def handle_catch(data):
         room["game_started"] = False
         return
 
-    # THE ROLE SWAP CUTSCENE EVENT!
-    # Before starting gameplay, tell all browsers to pause movement and flash a 
-    # "ROLE STEAL! Player X is now Pac-Man!" animation text card on screen.
     emit('play_cutscene', {
         'type': 'ROLE_SWAP_ALERT', 
         'new_pacman': ghost_id,
