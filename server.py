@@ -1,17 +1,14 @@
-import eventlet
-eventlet.monkey_patch()
-
 import os
 from flask import Flask
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @app.route('/')
 def home():
-    return "Pac-Man Vs. Server is running!"
+    return "Pac-Man Vs. Server is running on Python 3.14!"
 
 @socketio.on('connect')
 def handle_connect():
