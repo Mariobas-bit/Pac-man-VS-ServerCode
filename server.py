@@ -1,11 +1,14 @@
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import random
-import time
 from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 game_rooms = {}
 
@@ -15,6 +18,7 @@ def home():
 
 @socketio.on('connect')
 def handle_connect():
+    print(f"--- Player connected! ID: {request.sid} ---")
     emit('change_menu_state', {'state': 'MAIN_MENU'})
 
 @socketio.on('join_game_room')
@@ -103,9 +107,7 @@ def handle_start_game(data):
         room["scores"][pid] = 0
 
     room["pacman_id"] = random.choice(room["players"])
-    
     emit('play_cutscene', {'type': 'MATCH_START_INTRO'}, to=room_code)
-    
     send_role_updates(room_code)
 
 @socketio.on('pacman_ate_pellet')
