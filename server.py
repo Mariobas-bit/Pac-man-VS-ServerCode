@@ -2,17 +2,13 @@ from gevent import monkey
 monkey.patch_all()
 
 from flask.ctx import RequestContext
-
-def get_session(self):
-    return getattr(self, "_session", None)
-
-def set_session(self, value):
-    self._session = value
-
+def get_session(self): return getattr(self, "_session", None)
+def set_session(self, value): self._session = value
 RequestContext.session = property(get_session, set_session)
 
 import os
 import random
+import string  # Secret ingredient to generate letters!
 from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
@@ -20,6 +16,16 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 game_rooms = {}
+
+# --- HELPER FUNCTION: GENERATE 4-CHARACTER ALPHANUMERIC CODE ---
+def generate_unique_code():
+    while True:
+        # Generates a random 4-character string like 'X8R2'
+        characters = string.ascii_uppercase + string.digits
+        code = ''.join(random.choice(characters) for _ in range(4))
+        # Ensure we don't accidentally duplicate an active room code
+        if code not in game_rooms:
+            return code
 
 @app.route('/')
 def home():
@@ -30,47 +36,62 @@ def handle_connect():
     print(f"--- Player connected! ID: {request.sid} ---")
     emit('change_menu_state', {'state': 'MAIN_MENU'})
 
+# --- NEW EVENT: HOSTING / CREATING A FRESH RANDOM ROOM ---
+@socketio.on('create_game_room')
+def handle_create_room():
+    player_id = request.sid
+    room_code = generate_unique_code() # Get our clean 'A9B2' style code
+
+    game_rooms[room_code] = {
+        "players": [player_id],
+        "host_id": player_id,
+        "game_started": False,
+        "points_to_win": 1000,
+        "pacman_id": None,
+        "scores": {player_id: 0}
+    }
+
+    join_room(room_code)
+    print(f"Host {player_id} created a brand new Room: {room_code}")
+
+    # Send the update back to the room creator
+    emit('lobby_update', {
+        'room_code': room_code,
+        'player_count': 1,
+        'players_list': [player_id],
+        'is_host': True
+    }, to=room_code)
+
+# --- JOIN EVENT: MODIFIED TO SAFELY LOOK UP CODES ---
 @socketio.on('join_game_room')
 def handle_join_room(data):
-    room_code = data.get('room_code')
+    room_code = data.get('room_code', '').strip().upper() # Convert to uppercase automatically
     player_id = request.sid
 
-    if not room_code:
-        emit('error_message', {'msg': 'Invalid room code.'})
-        return
-
+    # 1. Error check: Does the room exist?
     if room_code not in game_rooms:
-        game_rooms[room_code] = {
-            "players": [],
-            "host_id": player_id,
-            "game_started": False,
-            "points_to_win": 1000,
-            "pacman_id": None,
-            "scores": {}
-        }
+        emit('error_message', {'msg': 'ROOM NOT FOUND'})
+        return
 
     room = game_rooms[room_code]
 
     if len(room["players"]) >= 4:
-        emit('error_message', {'msg': 'This game lobby is full!'})
+        emit('error_message', {'msg': 'LOBBY FULL'})
         return
 
     if room["game_started"]:
-        emit('error_message', {'msg': 'This game is already in progress!'})
+        emit('error_message', {'msg': 'MATCH IN PROGRESS'})
         return
 
     room["players"].append(player_id)
     room["scores"][player_id] = 0
     join_room(room_code)
 
-    emit('change_menu_state', {'state': 'LOBBY_WAITING'})
-
-    is_host = (player_id == room["host_id"])
     emit('lobby_update', {
         'room_code': room_code,
         'player_count': len(room["players"]),
         'players_list': room["players"],
-        'is_host': is_host
+        'is_host': (player_id == room["host_id"])
     }, to=room_code)
 
 @socketio.on('disconnect')
@@ -85,6 +106,7 @@ def handle_disconnect():
 
             if len(room_data["players"]) == 0:
                 del game_rooms[room_code]
+                print(f"Room {room_code} empty. Deleted.")
             else:
                 emit('lobby_update', {
                     'room_code': room_code,
@@ -101,12 +123,10 @@ def handle_start_game(data):
     if room_code not in game_rooms: return
     room = game_rooms[room_code]
 
-    if player_id != room["host_id"]:
-        emit('error_message', {'msg': 'Only the host can start the game!'})
-        return
+    if player_id != room["host_id"]: return
 
     if len(room["players"]) < 2:
-        emit('error_message', {'msg': 'You need at least 2 players to start!'})
+        emit('error_message', {'msg': 'NEED 2+ PLAYERS'})
         return
 
     room["game_started"] = True
@@ -126,44 +146,30 @@ def handle_pellet(data):
     room = game_rooms[room_code]
     pacman_id = room["pacman_id"]
     if not pacman_id: return
-
     room["scores"][pacman_id] += 10
-    
     if room["scores"][pacman_id] >= room["points_to_win"]:
         emit('change_menu_state', {'state': 'GAME_OVER', 'winner': pacman_id}, to=room_code)
         room["game_started"] = False
         return
-
     emit('score_update', {'scores': room["scores"]}, to=room_code)
 
 @socketio.on('ghost_caught_pacman')
 def handle_catch(data):
     room_code = data.get('room_code')
     ghost_id = request.sid
-    
     if room_code not in game_rooms: return
     room = game_rooms[room_code]
     pacman_id = room["pacman_id"]
-
     if not pacman_id or ghost_id == pacman_id: return
-
     current_pacman_score = room["scores"][pacman_id]
     points_to_steal = min(200, current_pacman_score)
-    
     room["scores"][pacman_id] -= points_to_steal
     room["scores"][ghost_id] += points_to_steal
-
     if room["scores"][ghost_id] >= room["points_to_win"]:
         emit('change_menu_state', {'state': 'GAME_OVER', 'winner': ghost_id}, to=room_code)
         room["game_started"] = False
         return
-
-    emit('play_cutscene', {
-        'type': 'ROLE_SWAP_ALERT', 
-        'new_pacman': ghost_id,
-        'old_pacman': pacman_id
-    }, to=room_code)
-
+    emit('play_cutscene', {'type': 'ROLE_SWAP_ALERT', 'new_pacman': ghost_id, 'old_pacman': pacman_id}, to=room_code)
     room["pacman_id"] = ghost_id
     emit('score_update', {'scores': room["scores"]}, to=room_code)
     send_role_updates(room_code)
@@ -171,10 +177,8 @@ def handle_catch(data):
 def send_role_updates(room_code):
     room = game_rooms[room_code]
     for pid in room["players"]:
-        if pid == room["pacman_id"]:
-            emit('assigned_role', {'role': 'PAC_MAN'}, to=pid)
-        else:
-            emit('assigned_role', {'role': 'GHOST'}, to=pid)
+        if pid == room["pacman_id"]: emit('assigned_role', {'role': 'PAC_MAN'}, to=pid)
+        else: emit('assigned_role', {'role': 'GHOST'}, to=pid)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
