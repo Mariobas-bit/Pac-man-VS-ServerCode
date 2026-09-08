@@ -1,9 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
 
-# 2. THE FLASK SESSION FIX FOR PYTHON 3.14 / FLASK 3.1+
-# This dynamically re-introduces the session property with a custom getter/setter 
-# so that Flask-SocketIO can connect cleanly without crashing!
 from flask.ctx import RequestContext
 if not hasattr(RequestContext, "session"):
     RequestContext.session = property(
