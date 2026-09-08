@@ -2,11 +2,14 @@ from gevent import monkey
 monkey.patch_all()
 
 from flask.ctx import RequestContext
-if not hasattr(RequestContext, "session"):
-    RequestContext.session = property(
-        lambda self: getattr(self, "_session", None),
-        lambda self, value: setattr(self, "_session", value)
-    )
+
+def get_session(self):
+    return getattr(self, "_session", None)
+
+def set_session(self, value):
+    self._session = value
+
+RequestContext.session = property(get_session, set_session)
 
 import os
 import random
