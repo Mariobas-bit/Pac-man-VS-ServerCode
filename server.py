@@ -57,7 +57,7 @@ def handle_create_room():
     }, to=room_code)
 
     emit('lobby_status_personal', {
-        'is_host': True
+        'is_host': True,
     }, to=player_id)
 
 @socketio.on('join_game_room')
