@@ -49,6 +49,12 @@ def handle_create_room():
 
     join_room(room_code)
     print(f"Host {player_id} created a brand new Room: {room_code}")
+
+    emit('lobby_update', {
+        'room_code': room_code,
+        'player_count': 1,
+        'players_list': room["players"]
+    }, to=room_code)
     
     emit('lobby_status_personal', {
         'is_host': True
