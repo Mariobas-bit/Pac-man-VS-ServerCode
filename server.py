@@ -8,7 +8,7 @@ RequestContext.session = property(get_session, set_session)
 
 import os
 import random
-import string  # Secret ingredient to generate letters!
+import string
 from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
@@ -17,13 +17,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 game_rooms = {}
 
-# --- HELPER FUNCTION: GENERATE 4-CHARACTER ALPHANUMERIC CODE ---
 def generate_unique_code():
     while True:
-        # Generates a random 4-character string like 'X8R2'
         characters = string.ascii_uppercase + string.digits
         code = ''.join(random.choice(characters) for _ in range(4))
-        # Ensure we don't accidentally duplicate an active room code
         if code not in game_rooms:
             return code
 
@@ -36,11 +33,10 @@ def handle_connect():
     print(f"--- Player connected! ID: {request.sid} ---")
     emit('change_menu_state', {'state': 'MAIN_MENU'})
 
-# --- NEW EVENT: HOSTING / CREATING A FRESH RANDOM ROOM ---
 @socketio.on('create_game_room')
 def handle_create_room():
     player_id = request.sid
-    room_code = generate_unique_code() # Get our clean 'A9B2' style code
+    room_code = generate_unique_code()
 
     game_rooms[room_code] = {
         "players": [player_id],
@@ -54,7 +50,6 @@ def handle_create_room():
     join_room(room_code)
     print(f"Host {player_id} created a brand new Room: {room_code}")
 
-    # Send the update back to the room creator
     emit('lobby_update', {
         'room_code': room_code,
         'player_count': 1,
@@ -62,13 +57,11 @@ def handle_create_room():
         'is_host': True
     }, to=room_code)
 
-# --- JOIN EVENT: MODIFIED TO SAFELY LOOK UP CODES ---
 @socketio.on('join_game_room')
 def handle_join_room(data):
-    room_code = data.get('room_code', '').strip().upper() # Convert to uppercase automatically
+    room_code = data.get('room_code', '').strip().upper()
     player_id = request.sid
 
-    # 1. Error check: Does the room exist?
     if room_code not in game_rooms:
         emit('error_message', {'msg': 'ROOM NOT FOUND'})
         return
@@ -91,8 +84,11 @@ def handle_join_room(data):
         'room_code': room_code,
         'player_count': len(room["players"]),
         'players_list': room["players"],
-        'is_host': (player_id = room["host_id"])
     }, to=room_code)
+
+    emit('lobby_status_personal', {
+        'is_host': False
+    }, to=player_id)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -108,6 +104,10 @@ def handle_disconnect():
                 del game_rooms[room_code]
                 print(f"Room {room_code} empty. Deleted.")
             else:
+                if player_id == room_data["host_id"]:
+                    room_data["host_id"] = room_data["players"][0]
+                    emit('lobby_status_personal', {'is_host': True}, to=room_data["host_id"])
+
                 emit('lobby_update', {
                     'room_code': room_code,
                     'player_count': len(room_data["players"]),
