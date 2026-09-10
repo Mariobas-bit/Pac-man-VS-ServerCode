@@ -31,7 +31,7 @@ def home():
 @socketio.on('connect')
 def handle_connect():
     print(f"--- Player connected! ID: {request.sid} ---")
-    emit('change_menu_state', {'state': 'MAIN_MENU'})
+    emit('server_on',{'state': True},to=request.sid)
 
 @socketio.on('create_game_room')
 def handle_create_room():
