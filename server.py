@@ -28,10 +28,9 @@ def generate_unique_code():
 def home():
     return "Pac-Man Vs. Server is running on Python 3.14!"
 
-@socketio.on('connect')
-def handle_connect():
-    print(f"--- Player connected! ID: {request.sid} ---")
-    emit('server_on',{'state': True},to=request.sid)
+@socketio.on('server_check')
+def server_on():
+    emit('server_on', {"status": True}, to=request.sid)
 
 @socketio.on('create_game_room')
 def handle_create_room():
