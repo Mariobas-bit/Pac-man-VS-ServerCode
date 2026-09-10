@@ -91,7 +91,7 @@ def handle_join_room(data):
         'room_code': room_code,
         'player_count': len(room["players"]),
         'players_list': room["players"],
-        'is_host': (player_id == room["host_id"])
+        'is_host': (player_id = room["host_id"])
     }, to=room_code)
 
 @socketio.on('disconnect')
