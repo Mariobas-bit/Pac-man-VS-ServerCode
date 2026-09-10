@@ -53,7 +53,7 @@ def handle_create_room():
     emit('lobby_update', {
         'room_code': room_code,
         'player_count': 1,
-        'players_list': room["players"]
+        'players_list': [player_id]
     }, to=room_code)
     
     emit('lobby_status_personal', {
