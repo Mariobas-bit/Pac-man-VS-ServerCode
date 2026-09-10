@@ -29,7 +29,8 @@ def home():
     return "Pac-Man Vs. Server is running on Python 3.14!"
 
 @socketio.on('server_check')
-def server_on():
+def server_on(data):
+    print(f"Server check received from client: {data}")
     emit('server_on', {"status": True}, to=request.sid)
 
 @socketio.on('create_game_room')
